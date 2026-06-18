@@ -77,14 +77,14 @@ export default function AssignmentsPage() {
 
     try {
       // Fetch Datasets
-      const dsRes = await fetch('http://100.59.0.187:4000/api/datasets', {
+      const dsRes = await fetch('/api/proxy/api/datasets', {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       const dsData = await dsRes.json();
       setDatasets(dsData.datasets || []);
 
       // Fetch Agents
-      const agentsRes = await fetch('http://100.59.0.187:4000/api/users/agents', {
+      const agentsRes = await fetch('/api/proxy/api/users/agents', {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       const agentsData = await agentsRes.json();
@@ -103,7 +103,7 @@ export default function AssignmentsPage() {
     if (!token) return;
 
     try {
-      const res = await fetch(`http://100.59.0.187:4000/api/assignments?page=${currentPage}&per_page=${perPage}`, {
+      const res = await fetch(`/api/proxy/api/assignments?page=${currentPage}&per_page=${perPage}`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       const data = await res.json();
@@ -140,7 +140,7 @@ export default function AssignmentsPage() {
     if (!token) return;
 
     try {
-      const res = await fetch('http://100.59.0.187:4000/api/assignments', {
+      const res = await fetch('/api/proxy/api/assignments', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -182,7 +182,7 @@ export default function AssignmentsPage() {
     if (!token) return;
 
     try {
-      const res = await fetch(`http://100.59.0.187:4000/api/assignments/${id}`, {
+      const res = await fetch(`/api/proxy/api/assignments/${id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://100.59.0.187:4000';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? '/api/proxy';
 
 export class ApiError extends Error {
   constructor(

@@ -90,7 +90,7 @@ export default function ContactsPage() {
       if (appliedTag) queryParams.set('tag', appliedTag);
       if (appliedSearch) queryParams.set('q', appliedSearch);
 
-      const res = await fetch(`http://100.59.0.187:4000/api/contacts?${queryParams.toString()}`, {
+      const res = await fetch(`/api/proxy/api/contacts?${queryParams.toString()}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -170,7 +170,7 @@ export default function ContactsPage() {
     if (!token) return;
 
     try {
-      const res = await fetch('http://100.59.0.187:4000/api/datasets', {
+      const res = await fetch('/api/proxy/api/datasets', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

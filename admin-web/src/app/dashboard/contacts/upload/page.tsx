@@ -34,7 +34,7 @@ export default function UploadPage() {
 
     async function checkBatchStatus() {
       try {
-        const res = await fetch(`http://100.59.0.187:4000/api/uploads/batches`, {
+        const res = await fetch(`/api/proxy/api/uploads/batches`, {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
@@ -123,7 +123,7 @@ export default function UploadPage() {
 
     try {
       // Step 1: Request presigned URL from backend
-      const presignRes = await fetch('http://100.59.0.187:4000/api/uploads/presign', {
+      const presignRes = await fetch('/api/proxy/api/uploads/presign', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
