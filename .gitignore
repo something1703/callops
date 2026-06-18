@@ -1,0 +1,28 @@
+# Secrets — NEVER commit
+.env
+.env.local
+.env*.local
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.next/
+out/
+
+# Drizzle generated migrations (optional — keep if you want version-controlled migrations)
+# drizzle/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*

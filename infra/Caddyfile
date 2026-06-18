@@ -1,0 +1,53 @@
+# Caddyfile — CallOps Production
+# Replace callops.yourdomain.com with your actual domain.
+# Caddy automatically obtains and renews Let's Encrypt TLS certificates.
+
+# Admin web — main user-facing panel
+callops.yourdomain.com {
+    reverse_proxy admin-web:3000
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    encode gzip
+    log {
+        output file /var/log/caddy/admin-web.log
+    }
+}
+
+# Backend API — called by admin web and Android app
+api.callops.yourdomain.com {
+    reverse_proxy backend:4000
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+    }
+
+    encode gzip
+    log {
+        output file /var/log/caddy/api.log
+    }
+}
+
+# Metabase — analytics dashboards (restrict to VPN/internal if possible)
+metabase.callops.yourdomain.com {
+    reverse_proxy metabase:3001
+
+    # Optional: IP allowlist (uncomment and set your office/VPN IP)
+    # @blocked not remote_ip 203.0.113.0/24
+    # respond @blocked 403
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    }
+
+    log {
+        output file /var/log/caddy/metabase.log
+    }
+}

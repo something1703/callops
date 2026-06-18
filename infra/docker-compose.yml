@@ -1,0 +1,96 @@
+# CallOps — Production Docker Compose
+# Usage: docker compose --env-file .env.production up -d
+#
+# Services:
+#   backend    — Fastify API (port 4000)
+#   admin-web  — Next.js admin panel (port 3000)
+#   metabase   — BI dashboards (port 3001), pointed at Neon read-only role
+#   caddy      — TLS termination + reverse proxy
+#
+# All services are on the internal "callops" network.
+# Only Caddy exposes ports to the host.
+
+version: "3.9"
+
+networks:
+  callops:
+    driver: bridge
+
+services:
+
+  # ── Fastify API ──────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env.production
+    expose:
+      - "4000"
+    networks:
+      - callops
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── Next.js admin web ────────────────────────────────────────────────────────
+  admin-web:
+    build:
+      context: ../admin-web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env.production
+    expose:
+      - "3000"
+    networks:
+      - callops
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ── Metabase ─────────────────────────────────────────────────────────────────
+  metabase:
+    image: metabase/metabase:latest
+    restart: unless-stopped
+    expose:
+      - "3001"
+    environment:
+      # Metabase uses its own internal H2 DB for app state (dashboards, users).
+      # Point it at Neon using the metabase_reader read-only role (setup-readonly-role.sql).
+      MB_DB_TYPE: postgres
+      MB_DB_HOST: ${METABASE_DB_HOST}
+      MB_DB_PORT: ${METABASE_DB_PORT:-5432}
+      MB_DB_DBNAME: ${METABASE_DB_NAME:-neondb}
+      MB_DB_USER: ${METABASE_DB_USER:-metabase_reader}
+      MB_DB_PASS: ${METABASE_DB_PASS}
+      JAVA_TIMEZONE: Asia/Kolkata
+    networks:
+      - callops
+    volumes:
+      - metabase_data:/metabase-data
+
+  # ── Caddy reverse proxy (TLS) ────────────────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - callops
+    depends_on:
+      - backend
+      - admin-web
+      - metabase
+
+volumes:
+  metabase_data:
+  caddy_data:
+  caddy_config:

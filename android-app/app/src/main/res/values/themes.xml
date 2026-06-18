@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Base theme required for the XML manifest reference.
+        The actual UI is 100% Compose — this theme is only applied
+        to the window before Compose takes over.
+    -->
+    <style name="Theme.CallOps" parent="android:Theme.Material.NoTitleBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Gray-950 — matches the app background colour in Compose -->
+    <color name="window_background">#030712</color>
+    <color name="ic_launcher_background">#4F46E5</color>
+</resources>
