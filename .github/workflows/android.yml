@@ -25,6 +25,11 @@ jobs:
         echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
         echo "API_BASE_URL=http://100.59.0.187:4000" >> local.properties
         echo "GOOGLE_CLIENT_ID=377323041120-sk9qa3o26m8mj2dukffgp84pksq3sbsa.apps.googleusercontent.com" >> local.properties
+        echo "--- local.properties ---"
+        cat local.properties
+        echo "--- ANDROID_SDK_ROOT ---"
+        echo $ANDROID_SDK_ROOT
+        ls $ANDROID_SDK_ROOT || echo "SDK path does not exist!"
 
     - name: Grant execute permission for gradlew
       working-directory: ./android-app
@@ -32,7 +37,7 @@ jobs:
 
     - name: Build debug APK
       working-directory: ./android-app
-      run: ./gradlew assembleDebug --no-daemon
+      run: ./gradlew assembleDebug --no-daemon --stacktrace
 
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4
