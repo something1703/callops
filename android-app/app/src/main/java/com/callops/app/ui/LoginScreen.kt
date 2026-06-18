@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.sp
 import com.callops.app.ui.theme.*
 import com.callops.app.viewmodel.AuthState
 import com.callops.app.viewmodel.AuthViewModel
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
 
 @Composable
 fun LoginScreen(
@@ -74,7 +76,7 @@ fun LoginScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = androidx.compose.material.icons.Icons.Default.Call,
+                    imageVector = Icons.Default.Call,
                     contentDescription = null,
                     tint = Color.White,
                     modifier = Modifier.size(36.dp),

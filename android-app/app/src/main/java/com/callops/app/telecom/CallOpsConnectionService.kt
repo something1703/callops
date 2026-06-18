@@ -107,11 +107,6 @@ class CallOpsConnection(
                 Log.i(TAG, "ENDED at $ts — ring=${ringDuration}s talk=${talkDuration}s")
                 onCallEnded()
             }
-            STATE_FAILED -> {
-                events += buildCallEventPayload("failed", ts)
-                Log.i(TAG, "FAILED at $ts")
-                onCallEnded()
-            }
         }
     }
 
