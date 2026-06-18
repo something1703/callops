@@ -36,7 +36,7 @@ export default function LivePage() {
         ? localStorage.getItem('callops_token') ?? sessionStorage.getItem('callops_token')
         : null;
 
-      const res = await fetch('/api/proxy/calls/live', {
+      const res = await fetch('/api/proxy/api/calls/live', {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 

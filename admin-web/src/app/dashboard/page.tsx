@@ -65,7 +65,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const token = localStorage.getItem('callops_token') ?? sessionStorage.getItem('callops_token') ?? '';
-    fetch('/api/proxy/analytics/summary', {
+    fetch('/api/proxy/api/analytics/summary', {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.ok ? r.json() : null)

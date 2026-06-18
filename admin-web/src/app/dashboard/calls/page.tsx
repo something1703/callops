@@ -31,7 +31,7 @@ export default function CallsPage() {
     : '';
 
   useEffect(() => {
-    fetch('/api/proxy/analytics/recent-calls?per_page=100', {
+    fetch('/api/proxy/api/analytics/recent-calls?per_page=100', {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
@@ -49,7 +49,7 @@ export default function CallsPage() {
     }
     setPresignLoading(callId);
     try {
-      const res = await fetch(`/api/proxy/analytics/recording/${callId}/presign`, {
+      const res = await fetch(`/api/proxy/api/analytics/recording/${callId}/presign`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

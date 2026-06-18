@@ -54,10 +54,10 @@ export default function AuditPage() {
     const headers = { Authorization: `Bearer ${token}` };
 
     Promise.all([
-      fetch('/api/proxy/analytics/summary', { headers }).then((r) => r.json()),
-      fetch('/api/proxy/analytics/calls-by-agent?days=30', { headers }).then((r) => r.json()),
-      fetch('/api/proxy/analytics/calls-over-time?days=30', { headers }).then((r) => r.json()),
-      fetch('/api/proxy/analytics/audit-log?per_page=50', { headers }).then((r) => r.json()),
+      fetch('/api/proxy/api/analytics/summary', { headers }).then((r) => r.json()),
+      fetch('/api/proxy/api/analytics/calls-by-agent?days=30', { headers }).then((r) => r.json()),
+      fetch('/api/proxy/api/analytics/calls-over-time?days=30', { headers }).then((r) => r.json()),
+      fetch('/api/proxy/api/analytics/audit-log?per_page=50', { headers }).then((r) => r.json()),
     ])
       .then(([s, lb, ts, al]) => {
         setSummary(s);
