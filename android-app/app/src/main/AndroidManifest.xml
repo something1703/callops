@@ -39,11 +39,36 @@
             android:name=".MainActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
+            <!-- Launcher icon -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!--
+                These DIAL intent filters are REQUIRED for the system to recognise
+                CallOps as a potential default phone/dialer app.
+                Without them, CallOps never appears in:
+                  Settings → Apps → Default apps → Phone app
+                and RoleManager.createRequestRoleIntent(ROLE_DIALER) silently fails.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.DIAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.DIAL" />
+                <data android:scheme="tel" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <data android:scheme="tel" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+            </intent-filter>
         </activity>
+
 
         <!-- ── In-call screen — launched by InCallService ─────────────────── -->
         <activity

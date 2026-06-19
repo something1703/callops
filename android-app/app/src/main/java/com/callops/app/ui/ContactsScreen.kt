@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhoneForwarded
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
@@ -35,6 +36,7 @@ fun ContactsScreen(
     authViewModel: AuthViewModel,
     onSignOut: () -> Unit,
     onCall: (phone: String, contactId: String, contactName: String) -> Unit = { _, _, _ -> },
+    onCallSystemDialer: (phone: String, contactId: String, contactName: String) -> Unit = { _, _, _ -> },
 ) {
     val state by contactsViewModel.state.collectAsState()
     val user by contactsViewModel.user.collectAsState()
@@ -131,6 +133,9 @@ fun ContactsScreen(
                                 onCall = {
                                     onCall(contact.phone_number, contact.id, contact.full_name)
                                 },
+                                onCallSystemDialer = {
+                                    onCallSystemDialer(contact.phone_number, contact.id, contact.full_name)
+                                },
                             )
                         }
                     }
@@ -181,7 +186,11 @@ fun ContactsScreen(
 // ── Contact card ───────────────────────────────────────────────────────────────
 
 @Composable
-private fun ContactCard(contact: AssignedContact, onCall: () -> Unit = {}) {
+private fun ContactCard(
+    contact: AssignedContact,
+    onCall: () -> Unit = {},
+    onCallSystemDialer: () -> Unit = {},
+) {
     val statusColor = when (contact.status) {
         "new"            -> Indigo400
         "contacted"      -> AmberWarn
@@ -263,7 +272,7 @@ private fun ContactCard(contact: AssignedContact, onCall: () -> Unit = {}) {
                 }
             }
 
-            // Right column: status chip + call button
+            // Right column: status chip + call buttons
             Column(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -280,17 +289,29 @@ private fun ContactCard(contact: AssignedContact, onCall: () -> Unit = {}) {
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     )
                 }
-                // Call button
                 if (contact.status != "do_not_call") {
+                    // Primary: CallOps in-app dialer
                     IconButton(
                         onClick = onCall,
                         modifier = androidx.compose.ui.Modifier.size(36.dp),
                     ) {
                         Icon(
                             imageVector = Icons.Default.Call,
-                            contentDescription = "Call ${contact.full_name}",
+                            contentDescription = "Call via CallOps",
                             tint = GreenActive,
                             modifier = androidx.compose.ui.Modifier.size(20.dp),
+                        )
+                    }
+                    // Secondary: System dialer fallback
+                    IconButton(
+                        onClick = onCallSystemDialer,
+                        modifier = androidx.compose.ui.Modifier.size(30.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PhoneForwarded,
+                            contentDescription = "Call via system dialer",
+                            tint = Gray600,
+                            modifier = androidx.compose.ui.Modifier.size(16.dp),
                         )
                     }
                 }

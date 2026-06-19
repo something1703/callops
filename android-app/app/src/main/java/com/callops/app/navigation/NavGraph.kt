@@ -20,6 +20,7 @@ import com.callops.app.ui.ContactsScreen
 import com.callops.app.ui.DialerRoleScreen
 import com.callops.app.ui.LoginScreen
 import com.callops.app.ui.ManualOutcomeSheet
+import com.callops.app.ui.launchSystemDialer
 import com.callops.app.viewmodel.AuthViewModel
 import com.callops.app.viewmodel.ContactsViewModel
 import kotlinx.coroutines.flow.firstOrNull
@@ -130,7 +131,16 @@ fun CallOpsNavGraph(tokenStore: TokenStore) {
                     }
                 },
                 onCall = { phone, contactId, contactName ->
+                    // CallOps in-app calling: requests CALL_PHONE permission + DialerRole
                     initiateCall(phone, contactId, contactName)
+                },
+                onCallSystemDialer = { phone, contactId, contactName ->
+                    // System dialer: open native phone app directly + show manual outcome sheet
+                    launchSystemDialer(context, phone)
+                    outcomeContactId = contactId
+                    outcomeContactName = contactName
+                    outcomePhone = phone
+                    showOutcomeSheet = true
                 },
             )
         }
