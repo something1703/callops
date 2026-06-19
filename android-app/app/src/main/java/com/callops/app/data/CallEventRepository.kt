@@ -12,8 +12,8 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 
 import java.io.File
-import okhttp3.MediaType
-import okhttp3.RequestBody
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.asRequestBody
 import com.callops.app.data.model.RecordingPresignRequest
 
 /**
@@ -74,8 +74,8 @@ class CallEventRepository(
                             val s3Key = presignData.s3_key
 
                             Log.i(TAG, "Uploading WAV recording to S3: $s3Key")
-                            val mediaType = MediaType.parse("audio/wav")
-                            val requestBody = RequestBody.create(mediaType, audioFile)
+                            val mediaType = "audio/wav".toMediaTypeOrNull()
+                            val requestBody = audioFile.asRequestBody(mediaType)
 
                             val uploadResponse = ApiClient.apiService.uploadRecording(
                                 url = presignedUrl,
