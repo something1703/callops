@@ -2,6 +2,8 @@ package com.callops.app.ui
 
 import android.app.role.RoleManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,17 +30,17 @@ import com.callops.app.ui.theme.*
  * DialerRoleScreen
  *
  * Shown once before the agent's first call.
- * Per PHASE_3.md: "don't just fire the system dialog with no context —
- * give a clear, honest explanation screen first."
+ * Explains why we need the default dialer role, then presents two paths:
  *
- * After role is granted, [onRoleGranted] is called and this screen is never
- * shown again (the caller persists the result in DataStore/SharedPrefs).
- * If the agent declines, [onDeclined] is called and the contact card shows
- * a "Calling unavailable — tap to enable" state.
+ *  1. "Enable Calling" → requests ROLE_DIALER → custom in-app call screen + call logging
+ *  2. "Not now"        → opens system dialer via ACTION_CALL (always works, shows manual outcome prompt)
  */
 @RequiresApi(Build.VERSION_CODES.Q)
 @Composable
 fun DialerRoleScreen(
+    phoneNumber: String,
+    contactId: String,
+    contactName: String,
     onRoleGranted: () -> Unit,
     onDeclined: () -> Unit,
 ) {
@@ -54,10 +56,12 @@ fun DialerRoleScreen(
 
     val roleRequestLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
+    ) { _ ->
         if (roleManager.isRoleHeld(RoleManager.ROLE_DIALER)) {
             onRoleGranted()
         } else {
+            // Role declined — launch system dialer directly
+            launchSystemDialer(context, phoneNumber)
             onDeclined()
         }
     }
@@ -105,6 +109,15 @@ fun DialerRoleScreen(
                 textAlign = TextAlign.Center,
             )
 
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                "Calling ${contactName}",
+                fontSize = 14.sp,
+                color = Indigo400,
+                textAlign = TextAlign.Center,
+            )
+
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
@@ -127,7 +140,7 @@ fun DialerRoleScreen(
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     PermissionRow("✅", "Place calls over your SIM card")
                     PermissionRow("✅", "Show a custom call screen with contact info")
-                    PermissionRow("✅", "Log call duration to your CRM")
+                    PermissionRow("✅", "Log call duration to your CRM automatically")
                     PermissionRow("❌", "Access your personal contacts or call history")
                     PermissionRow("❌", "Record calls without showing you a status")
                 }
@@ -135,7 +148,7 @@ fun DialerRoleScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // Primary CTA
+            // Primary CTA — request dialer role
             Button(
                 onClick = {
                     val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER)
@@ -152,8 +165,13 @@ fun DialerRoleScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Secondary dismiss
-            TextButton(onClick = onDeclined) {
+            // Secondary dismiss — use system dialer (call still placed, no in-app tracking)
+            TextButton(
+                onClick = {
+                    launchSystemDialer(context, phoneNumber)
+                    onDeclined()
+                },
+            ) {
                 Text(
                     "Not now — use system dialer",
                     color = Gray400,
@@ -162,6 +180,12 @@ fun DialerRoleScreen(
             }
         }
     }
+}
+
+/** Opens the native phone app dial screen for [phoneNumber]. */
+fun launchSystemDialer(context: Context, phoneNumber: String) {
+    val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$phoneNumber"))
+    context.startActivity(intent)
 }
 
 @Composable

@@ -4,7 +4,7 @@
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, and, ne } from 'drizzle-orm';
+import { eq, and, ne, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { users } from '../db/schema.js';
 import { authenticate } from '../middleware/authenticate.js';
@@ -50,7 +50,12 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
           is_active: users.is_active,
         })
         .from(users)
-        .where(and(eq(users.role, 'agent'), eq(users.is_active, true)));
+        .where(
+          and(
+            eq(users.role, 'agent'),
+            eq(users.is_active, true)
+          )
+        );
 
       return reply.send({ agents });
     },

@@ -22,52 +22,11 @@ export default function UploadPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [batchId, setBatchId] = useState<string | null>(null);
   const [polledBatch, setPolledBatch] = useState<Batch | null>(null);
+  const [processResult, setProcessResult] = useState<{inserted: number; skipped_invalid: number; skipped_duplicates: number; valid_rows: number} | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Poll batch status when upload is in "processing" state
-  useEffect(() => {
-    if (uploadState !== 'processing' || !batchId) return;
-
-    let pollingInterval: ReturnType<typeof setInterval> | null = null;
-    const token = getToken();
-
-    async function checkBatchStatus() {
-      try {
-        const res = await fetch(`/api/proxy/api/uploads/batches`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-        if (!res.ok) throw new Error('Failed to fetch batches');
-        const data = await res.json();
-        const batches: Batch[] = data.batches || [];
-        const currentBatch = batches.find((b) => b.id === batchId);
-
-        if (currentBatch) {
-          setPolledBatch(currentBatch);
-          if (currentBatch.status === 'completed') {
-            setUploadState('success');
-            if (pollingInterval) clearInterval(pollingInterval);
-          } else if (currentBatch.status === 'failed') {
-            setUploadState('error');
-            setErrorMessage('Ingestion failed during ETL cleanup. Check the files or contact system admin.');
-            if (pollingInterval) clearInterval(pollingInterval);
-          }
-        }
-      } catch (err) {
-        console.error('Error polling batch status:', err);
-      }
-    }
-
-    // Initial check
-    checkBatchStatus();
-
-    // Check every 2 seconds
-    pollingInterval = setInterval(checkBatchStatus, 2000);
-
-    return () => { if (pollingInterval) clearInterval(pollingInterval); };
-  }, [uploadState, batchId]);
+  // (Polling loop removed — processing now happens synchronously via /api/uploads/process)
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -140,38 +99,70 @@ export default function UploadPage() {
         throw new Error(errData.message || 'Failed to request presigned upload URL.');
       }
 
-      const { batch_id, presigned_url } = await presignRes.json();
+      const { batch_id, presigned_url, s3_key } = await presignRes.json();
       setBatchId(batch_id);
 
       // Step 2: Upload file directly to S3 with progress tracking
       setUploadState('uploading');
 
-      const xhr = new XMLHttpRequest();
-      xhr.open('PUT', presigned_url, true);
-      xhr.setRequestHeader('Content-Type', file.type || 'text/csv');
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('PUT', presigned_url, true);
+        xhr.setRequestHeader('Content-Type', file.type || 'text/csv');
 
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          const percent = Math.round((event.loaded / event.total) * 100);
-          setProgress(percent);
-        }
-      };
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percent = Math.round((event.loaded / event.total) * 100);
+            setProgress(percent);
+          }
+        };
 
-      xhr.onload = () => {
-        if (xhr.status === 200) {
-          setUploadState('processing');
-        } else {
-          setUploadState('error');
-          setErrorMessage(`Direct upload failed with status ${xhr.status}.`);
-        }
-      };
+        xhr.onload = () => {
+          if (xhr.status === 200) resolve();
+          else reject(new Error(`S3 upload failed with status ${xhr.status}.`));
+        };
 
-      xhr.onerror = () => {
-        setUploadState('error');
-        setErrorMessage('Network error during S3 upload.');
-      };
+        xhr.onerror = () => reject(new Error('Network error during S3 upload.'));
+        xhr.send(file);
+      });
 
-      xhr.send(file);
+      // Step 3: Trigger backend ETL processing (downloads from S3, cleans, inserts)
+      setUploadState('processing');
+      setProgress(100);
+
+      const processRes = await fetch('/api/proxy/api/uploads/process', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ batch_id, s3_key }),
+      });
+
+      if (!processRes.ok) {
+        const errData = await processRes.json();
+        throw new Error(errData.message || 'ETL processing failed on the server.');
+      }
+
+      const result = await processRes.json();
+      setProcessResult({
+        inserted: result.inserted,
+        skipped_invalid: result.skipped_invalid,
+        skipped_duplicates: result.skipped_duplicates,
+        valid_rows: result.valid_rows,
+      });
+
+      // Fetch updated batch info for the success card
+      const batchRes = await fetch('/api/proxy/api/uploads/batches', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (batchRes.ok) {
+        const bData = await batchRes.json();
+        const updatedBatch = (bData.batches as Batch[]).find(b => b.id === batch_id);
+        if (updatedBatch) setPolledBatch(updatedBatch);
+      }
+
+      setUploadState('success');
 
     } catch (err: unknown) {
       setUploadState('error');
@@ -186,6 +177,7 @@ export default function UploadPage() {
     setErrorMessage('');
     setBatchId(null);
     setPolledBatch(null);
+    setProcessResult(null);
   };
 
   return (
@@ -293,13 +285,13 @@ export default function UploadPage() {
             <div className="text-center space-y-2">
               <h3 className="text-xl font-bold text-white">
                 {uploadState === 'presigning' && 'Initializing S3 Link...'}
-                {uploadState === 'uploading' && 'Uploading directly to S3...'}
-                {uploadState === 'processing' && 'ETL Pipeline Cleaning Data...'}
+                {uploadState === 'uploading' && 'Uploading to S3...'}
+                {uploadState === 'processing' && 'Processing & Cleaning Data...'}
               </h3>
               <p className="text-gray-400 text-sm max-w-md">
-                {uploadState === 'presigning' && 'Requesting authorized signature...'}
-                {uploadState === 'uploading' && 'Streaming file packets directly. Progress tracks upload speed.'}
-                {uploadState === 'processing' && 'Python ETL Lambda parsing CSV, normalizing phone numbers, and deduping rows in database.'}
+                {uploadState === 'presigning' && 'Requesting authorized upload signature...'}
+                {uploadState === 'uploading' && 'Streaming file directly to S3. Progress tracks upload speed.'}
+                {uploadState === 'processing' && 'Server is parsing CSV, normalizing phone numbers, and deduplicating rows. This may take a moment for large files.'}
               </p>
             </div>
           </div>
@@ -321,20 +313,36 @@ export default function UploadPage() {
             </div>
 
             {/* Batch Info Card */}
-            {polledBatch && (
+            {(polledBatch || processResult) && (
               <div className="w-full max-w-md bg-white/[0.02] border border-white/[0.06] rounded-xl p-5 space-y-3 text-left">
-                <div className="flex justify-between border-b border-white/[0.04] pb-2">
-                  <span className="text-xs text-gray-500">Filename</span>
-                  <span className="text-xs font-bold text-gray-300 truncate max-w-[200px]">{polledBatch.original_filename}</span>
-                </div>
-                <div className="flex justify-between border-b border-white/[0.04] pb-2">
-                  <span className="text-xs text-gray-500">Contacts Ingested</span>
-                  <span className="text-xs font-bold text-emerald-400">{polledBatch.row_count ?? 0}</span>
-                </div>
-                <div className="flex justify-between border-b border-white/[0.04] pb-2">
-                  <span className="text-xs text-gray-500">Batch ID</span>
-                  <span className="text-xs font-mono text-gray-400">{polledBatch.id}</span>
-                </div>
+                {polledBatch && (
+                  <div className="flex justify-between border-b border-white/[0.04] pb-2">
+                    <span className="text-xs text-gray-500">Filename</span>
+                    <span className="text-xs font-bold text-gray-300 truncate max-w-[200px]">{polledBatch.original_filename}</span>
+                  </div>
+                )}
+                {processResult && (
+                  <>
+                    <div className="flex justify-between border-b border-white/[0.04] pb-2">
+                      <span className="text-xs text-gray-500">✅ Contacts Inserted</span>
+                      <span className="text-xs font-bold text-emerald-400">{processResult.inserted.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-white/[0.04] pb-2">
+                      <span className="text-xs text-gray-500">⚠️ Skipped (duplicates)</span>
+                      <span className="text-xs font-bold text-amber-400">{processResult.skipped_duplicates.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-white/[0.04] pb-2">
+                      <span className="text-xs text-gray-500">❌ Skipped (invalid)</span>
+                      <span className="text-xs text-gray-500">{processResult.skipped_invalid.toLocaleString()}</span>
+                    </div>
+                  </>
+                )}
+                {batchId && (
+                  <div className="flex justify-between">
+                    <span className="text-xs text-gray-500">Batch ID</span>
+                    <span className="text-xs font-mono text-gray-600">{batchId}</span>
+                  </div>
+                )}
               </div>
             )}
 

@@ -17,9 +17,6 @@ import kotlinx.coroutines.launch
  * Single responsibility: POST call events to the backend after a call ends.
  * Uses its own CoroutineScope with a SupervisorJob so a failed submit does NOT
  * crash the app or affect any other coroutine.
- *
- * On failure: logs the error. A production Phase 4 hardening would add
- * WorkManager-based retry — kept simple here as per Phase 3 scope.
  */
 class CallEventRepository(
     private val tokenStore: TokenStore,
@@ -30,10 +27,13 @@ class CallEventRepository(
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    // Not currently used but kept for future WorkManager integration:
     @Suppress("unused")
     private val appContext = context.applicationContext
 
+    /**
+     * Submits a list of call-lifecycle events (dialing, active, ended, etc.)
+     * for a call that was handled in-app through the ConnectionService.
+     */
     fun submitEvents(
         callId: String,
         contactId: String,
@@ -63,13 +63,55 @@ class CallEventRepository(
                 if (response.isSuccessful) {
                     Log.i(TAG, "Call events submitted: callId=$callId events=${events.size}")
                 } else {
-                    Log.e(
-                        TAG,
-                        "Failed to submit call events: HTTP ${response.code()} — callId=$callId",
-                    )
+                    Log.e(TAG, "Failed to submit call events: HTTP ${response.code()} — callId=$callId")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Network error submitting call events for callId=$callId", e)
+            }
+        }
+    }
+
+    /**
+     * Submits a manual call outcome for calls placed via the system dialer.
+     * Because the system dialer handles the call natively, we create two
+     * synthetic events (dialing + ended) to represent the call in the CRM.
+     */
+    fun submitManualOutcome(
+        contactId: String,
+        outcome: String,
+        durationSeconds: Int = 0,
+    ) {
+        scope.launch {
+            try {
+                val storedUser = tokenStore.userFlow().firstOrNull() ?: run {
+                    Log.w(TAG, "No stored token — cannot submit manual outcome for contact $contactId")
+                    return@launch
+                }
+                val callId = java.util.UUID.randomUUID().toString()
+                val now = java.time.Instant.now().toString()
+                val events = listOf(
+                    CallEventPayload(state = "dialing", event_timestamp = now),
+                    CallEventPayload(
+                        state = "ended",
+                        event_timestamp = now,
+                        talk_duration_seconds = durationSeconds,
+                    ),
+                )
+                val response = ApiClient.apiService.submitCallEvents(
+                    bearerToken = "Bearer ${storedUser.token}",
+                    body = CallEventsRequest(
+                        call_id = callId,
+                        contact_id = contactId,
+                        events = events,
+                    ),
+                )
+                if (response.isSuccessful) {
+                    Log.i(TAG, "Manual outcome submitted: contactId=$contactId outcome=$outcome")
+                } else {
+                    Log.e(TAG, "Failed to submit manual outcome: HTTP ${response.code()}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Network error submitting manual outcome: contactId=$contactId", e)
             }
         }
     }
