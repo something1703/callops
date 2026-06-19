@@ -8,7 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PhoneForwarded
+import androidx.compose.material.icons.automirrored.filled.PhoneForwarded
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
@@ -308,7 +308,7 @@ private fun ContactCard(
                         modifier = androidx.compose.ui.Modifier.size(30.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.Default.PhoneForwarded,
+                            imageVector = Icons.AutoMirrored.Filled.PhoneForwarded,
                             contentDescription = "Call via system dialer",
                             tint = Gray600,
                             modifier = androidx.compose.ui.Modifier.size(16.dp),

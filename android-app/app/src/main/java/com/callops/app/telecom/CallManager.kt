@@ -65,7 +65,9 @@ class CallManager(private val context: Context) {
         return try {
             val uri = Uri.fromParts("tel", phoneNumber, null)
             val extras = Bundle().apply {
-                putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, phoneAccountHandle)
+                // Do not specify EXTRA_PHONE_ACCOUNT_HANDLE, so it places cellular calls via SIM card.
+                // Since CallOps is the default phone app, CallOpsInCallService will still bind to the call
+                // and display the custom UI.
                 putString(EXTRA_CONTACT_ID, contactId)
                 putString(EXTRA_CONTACT_NAME, contactName)
             }
