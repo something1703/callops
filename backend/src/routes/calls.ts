@@ -11,6 +11,7 @@ import { call_events, assignments, contacts, users } from '../db/schema.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { requireRole } from '../middleware/requireRole.js';
 import { writeAudit } from '../lib/audit.js';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const s3 = new S3Client({ region: process.env.AWS_REGION ?? 'ap-south-1' });
 const CALLS_BUCKET = process.env.CALLS_BUCKET!;
@@ -223,5 +224,44 @@ export async function callRoutes(fastify: FastifyInstance): Promise<void> {
 
       return reply.send({ calls });
     },
+  );
+
+  /**
+   * POST /api/calls/recording/presign
+   * Generates a 15-minute presigned S3 PUT URL for uploading a call recording file.
+   * Authenticated agents only.
+   */
+  fastify.post(
+    '/api/calls/recording/presign',
+    { preHandler: [authenticate] },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const body = z.object({
+        call_id: z.string().uuid(),
+      }).safeParse(req.body);
+
+      if (!body.success) {
+        return reply.status(400).send({ error: 'Bad Request', message: body.error.message });
+      }
+
+      const { call_id } = body.data;
+      const s3Key = `recordings/${new Date().toISOString().slice(0, 10)}/${call_id}.wav`;
+
+      try {
+        const cmd = new PutObjectCommand({
+          Bucket: CALLS_BUCKET,
+          Key: s3Key,
+          ContentType: 'audio/wav',
+        });
+        const presignedUrl = await getSignedUrl(s3, cmd, { expiresIn: 900 });
+
+        return reply.status(200).send({
+          presigned_url: presignedUrl,
+          s3_key: s3Key,
+        });
+      } catch (err) {
+        fastify.log.error({ err, call_id }, 'Failed to generate presigned upload URL for recording');
+        return reply.status(500).send({ error: 'Internal Server Error', message: 'Could not generate upload URL' });
+      }
+    }
   );
 }

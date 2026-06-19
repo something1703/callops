@@ -1,23 +1,26 @@
 package com.callops.app.telecom
 
+import android.content.Context
 import android.telecom.Call
+import android.telecom.CallAudioState
+import android.telecom.InCallService
+import android.util.Log
 import com.callops.app.data.CallEventRepository
 import com.callops.app.data.model.CallEventPayload
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.io.File
 import java.util.UUID
 
 /**
  * ActiveCallHolder — process-scoped singleton bridging InCallService → InCallActivity.
  *
- * InCallService cannot communicate directly with an Activity via constructor injection.
- * This singleton holds the live Call reference and a StateFlow of call state
- * that InCallActivity (and InCallScreen composable) observes.
- *
- * Cleared when InCallService.onCallRemoved() fires.
+ * Exposes live Call reference, CallAudioState, and triggers/coordinates Audio Recording.
  */
 object ActiveCallHolder {
+
+    private const val TAG = "ActiveCallHolder"
 
     data class CallInfo(
         val call: Call?,
@@ -33,7 +36,16 @@ object ActiveCallHolder {
     private val _callState = MutableStateFlow<Int>(Call.STATE_NEW)
     val callState: StateFlow<Int> = _callState.asStateFlow()
 
+    // Real audio state flow (mute/routing)
+    private val _audioState = MutableStateFlow<CallAudioState?>(null)
+    val audioState: StateFlow<CallAudioState?> = _audioState.asStateFlow()
+
     var callEventRepository: CallEventRepository? = null
+
+    private var inCallService: InCallService? = null
+    private var audioRecorder: CallAudioRecorder? = null
+    private var isRecordingActiveFlow = MutableStateFlow(false)
+    val isRecordingActive: StateFlow<Boolean> = isRecordingActiveFlow.asStateFlow()
 
     private val events = mutableListOf<CallEventPayload>()
     private var dialingTimestamp: String? = null
@@ -45,6 +57,32 @@ object ActiveCallHolder {
             _callState.value = state
             handleStateTransition(state, nowIso())
         }
+    }
+
+    fun setInCallService(service: InCallService) {
+        inCallService = service
+        // Populate initial audio state if available
+        service.callAudioState?.let { updateAudioState(it) }
+    }
+
+    fun clearInCallService() {
+        inCallService = null
+        _audioState.value = null
+    }
+
+    fun setMuted(muted: Boolean) {
+        Log.i(TAG, "setMuted: $muted")
+        inCallService?.setMuted(muted)
+    }
+
+    fun setSpeaker(speakerOn: Boolean) {
+        val route = if (speakerOn) CallAudioState.ROUTE_SPEAKER else CallAudioState.ROUTE_EARPIECE
+        Log.i(TAG, "setSpeaker: $speakerOn (route=$route)")
+        inCallService?.setAudioRoute(route)
+    }
+
+    fun updateAudioState(state: CallAudioState) {
+        _audioState.value = state
     }
 
     private fun handleStateTransition(state: Int, ts: String) {
@@ -62,6 +100,12 @@ object ActiveCallHolder {
                 if (activeTimestamp == null) {
                     activeTimestamp = ts
                     events += buildCallEventPayload("active", ts)
+                    
+                    // Start call recording
+                    val callId = _callInfo.value?.callId ?: UUID.randomUUID().toString()
+                    Log.i(TAG, "Starting call recorder for callId: $callId")
+                    audioRecorder?.start(callId)
+                    isRecordingActiveFlow.value = audioRecorder?.isActive?.value ?: false
                 }
             }
             Call.STATE_DISCONNECTED -> {
@@ -76,24 +120,45 @@ object ActiveCallHolder {
             activeTimestamp?.let { a -> elapsedSeconds(r, a) } ?: 0
         }
         val talkDuration = activeTimestamp?.let { a -> elapsedSeconds(a, ts) }
+        
+        // Stop recording and retrieve final .wav file
+        isRecordingActiveFlow.value = false
+        val wavFile = audioRecorder?.stop()
+        if (wavFile != null) {
+            Log.i(TAG, "WAV recording generated: ${wavFile.absolutePath} (${wavFile.length()} bytes)")
+        } else {
+            Log.w(TAG, "No WAV recording generated for this call")
+        }
+
         events += buildCallEventPayload(
             state = "ended",
             timestamp = ts,
             ringDuration = ringDuration,
             talkDuration = talkDuration,
         )
-        onCallEventsReady(contactId, events.toList())
+        onCallEventsReady(contactId, events.toList(), wavFile)
     }
 
-    fun setCall(call: Call, contactName: String = "", phoneNumber: String = "", contactId: String = "") {
+    fun setCall(
+        call: Call,
+        contactName: String = "",
+        phoneNumber: String = "",
+        contactId: String = "",
+        context: Context? = null
+    ) {
         call.registerCallback(callCallback)
         _callState.value = call.state
+
+        if (context != null) {
+            audioRecorder = CallAudioRecorder(context.applicationContext.cacheDir)
+        }
 
         // Initialize event tracking variables
         events.clear()
         dialingTimestamp = null
         ringingTimestamp = null
         activeTimestamp = null
+        isRecordingActiveFlow.value = false
 
         val currentInfo = _callInfo.value
         val resolvedName = if (contactName.isNotEmpty()) contactName else (currentInfo?.contactName ?: "")
@@ -123,6 +188,8 @@ object ActiveCallHolder {
 
         _callInfo.value = null
         _callState.value = Call.STATE_DISCONNECTED
+        audioRecorder = null
+        isRecordingActiveFlow.value = false
     }
 
     fun updateContactInfo(contactName: String, phoneNumber: String, contactId: String) {
@@ -137,11 +204,10 @@ object ActiveCallHolder {
 
     /**
      * Called when the call reaches an ended/failed state.
-     * Delegates to [callEventRepository] for the backend POST.
+     * Delegates to [callEventRepository] for the backend POST and optional S3 recording upload.
      */
-    fun onCallEventsReady(contactId: String, events: List<CallEventPayload>) {
+    fun onCallEventsReady(contactId: String, events: List<CallEventPayload>, audioFile: File? = null) {
         val callId = _callInfo.value?.callId ?: UUID.randomUUID().toString()
-        callEventRepository?.submitEvents(callId, contactId, events)
+        callEventRepository?.submitEvents(callId, contactId, events, audioFile)
     }
 }
-

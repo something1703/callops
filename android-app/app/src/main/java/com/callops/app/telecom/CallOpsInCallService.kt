@@ -1,6 +1,7 @@
 package com.callops.app.telecom
 
 import android.telecom.Call
+import android.telecom.CallAudioState
 import android.telecom.InCallService
 import android.util.Log
 import com.callops.app.ui.InCallActivity
@@ -26,8 +27,11 @@ class CallOpsInCallService : InCallService() {
         super.onCallAdded(call)
         Log.i(TAG, "onCallAdded: state=${call.state}")
 
+        // Save service reference for audio routing and muting controls
+        ActiveCallHolder.setInCallService(this)
+
         // Pass the call to the singleton holder so InCallActivity can observe it
-        ActiveCallHolder.setCall(call)
+        ActiveCallHolder.setCall(call, context = this)
 
         // Launch InCallActivity over the lockscreen
         val intent = InCallActivity.createIntent(this)
@@ -38,6 +42,13 @@ class CallOpsInCallService : InCallService() {
         super.onCallRemoved(call)
         Log.i(TAG, "onCallRemoved")
         ActiveCallHolder.clearCall()
+        ActiveCallHolder.clearInCallService()
         // InCallActivity observes ActiveCallHolder and finishes itself
+    }
+
+    override fun onCallAudioStateChanged(audioState: CallAudioState) {
+        super.onCallAudioStateChanged(audioState)
+        Log.i(TAG, "onCallAudioStateChanged: muted=${audioState.isMuted} route=${audioState.route}")
+        ActiveCallHolder.updateAudioState(audioState)
     }
 }

@@ -69,40 +69,49 @@ fun CallOpsNavGraph(tokenStore: TokenStore) {
     var pendingCallContactId by remember { mutableStateOf<String?>(null) }
     var pendingCallContactName by remember { mutableStateOf<String?>(null) }
 
-    val callPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-    ) { granted ->
+    val permissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+    ) { results ->
         val phone = pendingCallPhone ?: return@rememberLauncherForActivityResult
         val cId   = pendingCallContactId ?: return@rememberLauncherForActivityResult
         val cName = pendingCallContactName ?: return@rememberLauncherForActivityResult
-        if (granted) {
+        val phoneGranted = results[Manifest.permission.CALL_PHONE] ?: false
+        if (phoneGranted) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 navController.navigate(Routes.dialerRole(phone, cId, cName))
             } else {
                 callManager.placeCall(phone, cId, cName)
             }
         }
-        // If denied, do nothing — user can try again
+        // If denied CALL_PHONE, do nothing — user can try again
     }
 
     /** Entry point called when the agent taps the call button. */
     fun initiateCall(phone: String, contactId: String, contactName: String) {
-        val hasPermission = ContextCompat.checkSelfPermission(
+        val hasCallPhone = ContextCompat.checkSelfPermission(
             context, Manifest.permission.CALL_PHONE,
         ) == PackageManager.PERMISSION_GRANTED
+        val hasRecordAudio = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.RECORD_AUDIO,
+        ) == PackageManager.PERMISSION_GRANTED
 
-        if (hasPermission) {
+        if (hasCallPhone && hasRecordAudio) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 navController.navigate(Routes.dialerRole(phone, contactId, contactName))
             } else {
                 callManager.placeCall(phone, contactId, contactName)
             }
         } else {
-            // Store pending call details, then request permission
+            // Store pending call details, then request permissions
             pendingCallPhone = phone
             pendingCallContactId = contactId
             pendingCallContactName = contactName
-            callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
+            permissionsLauncher.launch(
+                arrayOf(
+                    Manifest.permission.CALL_PHONE,
+                    Manifest.permission.RECORD_AUDIO
+                )
+            )
         }
     }
 

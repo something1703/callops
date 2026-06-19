@@ -76,3 +76,12 @@ data class CallEventsResponse(
     val call_id: String,
     val events_written: Int,
 )
+
+data class RecordingPresignRequest(
+    val call_id: String,
+)
+
+data class RecordingPresignResponse(
+    val presigned_url: String,
+    val s3_key: String,
+)

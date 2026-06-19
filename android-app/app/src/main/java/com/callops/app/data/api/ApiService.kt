@@ -5,11 +5,16 @@ import com.callops.app.data.model.CallEventsRequest
 import com.callops.app.data.model.CallEventsResponse
 import com.callops.app.data.model.ContactsResponse
 import com.callops.app.data.model.GoogleAuthRequest
+import com.callops.app.data.model.RecordingPresignRequest
+import com.callops.app.data.model.RecordingPresignResponse
+import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
+import retrofit2.http.PUT
+import retrofit2.http.Url
 
 interface ApiService {
 
@@ -41,4 +46,17 @@ interface ApiService {
         @Header("Authorization") bearerToken: String,
         @Body body: CallEventsRequest,
     ): Response<CallEventsResponse>
+
+    @POST("/api/calls/recording/presign")
+    suspend fun getRecordingUploadUrl(
+        @Header("Authorization") bearerToken: String,
+        @Body body: RecordingPresignRequest,
+    ): Response<RecordingPresignResponse>
+
+    @PUT
+    suspend fun uploadRecording(
+        @Url url: String,
+        @Header("Content-Type") contentType: String,
+        @Body body: RequestBody,
+    ): Response<Void>
 }

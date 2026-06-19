@@ -1,12 +1,14 @@
 package com.callops.app.ui
 
 import android.telecom.Call
+import android.telecom.CallAudioState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
@@ -19,7 +21,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -31,24 +32,23 @@ import kotlinx.coroutines.delay
 /**
  * InCallScreen — the custom in-call UI.
  *
- * Per PHASE_3.md: "the single most-used screen in the whole app — needs to feel
- * instant and obvious (big tap targets, no ambiguity about what 'end call' does)."
- *
- * States: Dialing → Ringing → Active → Ending
- * UI: contact name, animated status ring, elapsed timer (ticks from ACTIVE state),
- * Mute, Speaker, and End Call controls with large tap targets.
+ * Toggles call controls based on call state and direction:
+ * - Incoming + Ringing: Shows Accept / Decline buttons.
+ * - Outgoing / Active: Shows Mute / Speaker / End Call buttons.
  */
 @Composable
 fun InCallScreen(onEndCall: () -> Unit) {
     val callInfo by ActiveCallHolder.callInfo.collectAsState()
     val callState by ActiveCallHolder.callState.collectAsState()
-
-    // Recording state — observed from AudioRecorder via a separate StateFlow if wired up,
-    // otherwise stays false (best-effort — VOICE_CALL source blocked on most Android 10+ devices)
-    val isRecordingActive = false  // TODO: wire to CallAudioRecorder.isActive via a StateFlow
+    val audioState by ActiveCallHolder.audioState.collectAsState()
+    val isRecordingActive by ActiveCallHolder.isRecordingActive.collectAsState()
 
     val contactName = callInfo?.contactName?.ifBlank { "Unknown" } ?: "Unknown"
     val phoneNumber = callInfo?.phoneNumber ?: ""
+
+    // ── Audio route and mute observations ─────────────────────────────────────
+    val isMuted = audioState?.isMuted ?: false
+    val isSpeaker = (audioState?.route ?: CallAudioState.ROUTE_EARPIECE) == CallAudioState.ROUTE_SPEAKER
 
     // ── Elapsed timer (starts when call becomes ACTIVE) ───────────────────────
     var elapsedSeconds by remember { mutableIntStateOf(0) }
@@ -68,20 +68,15 @@ fun InCallScreen(onEndCall: () -> Unit) {
         }
     }
 
-    // ── Audio controls ────────────────────────────────────────────────────────
-    val context = LocalContext.current
-    val audioManager = remember {
-        context.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
-    }
-    var isMuted by remember { mutableStateOf(false) }
-    var isSpeaker by remember { mutableStateOf(false) }
-
-    // ── Status derivation ─────────────────────────────────────────────────────
+    // ── Call state & direction derivation ─────────────────────────────────────
     val isActive = callState == Call.STATE_ACTIVE
     val isEnding = callState == Call.STATE_DISCONNECTING || callState == Call.STATE_DISCONNECTED
+    val isIncoming = callInfo?.call?.details?.callDirection == Call.Details.DIRECTION_INCOMING
+    val isRingingIncoming = isIncoming && callState == Call.STATE_RINGING
+
     val statusText = when (callState) {
         Call.STATE_DIALING, Call.STATE_CONNECTING -> "Calling…"
-        Call.STATE_RINGING -> "Ringing…"
+        Call.STATE_RINGING -> if (isIncoming) "Incoming Call…" else "Ringing…"
         Call.STATE_ACTIVE -> if (elapsedSeconds > 0) formatElapsed(elapsedSeconds) else "Connected"
         Call.STATE_DISCONNECTING -> "Ending…"
         else -> "Connecting…"
@@ -177,57 +172,124 @@ fun InCallScreen(onEndCall: () -> Unit) {
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // ── Control row ───────────────────────────────────────────────────
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 40.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Mute
-                CallControlButton(
-                    icon = if (isMuted) Icons.Default.MicOff else Icons.Default.Mic,
-                    label = if (isMuted) "Unmute" else "Mute",
-                    isActive = isMuted,
-                    activeColor = AmberWarn,
-                    onClick = {
-                        isMuted = !isMuted
-                        audioManager.isMicrophoneMute = isMuted
-                    },
-                )
-
-                // End Call — oversized red button
-                Box(
+            // ── Call Controls ─────────────────────────────────────────────────
+            if (isRingingIncoming) {
+                // Incoming call accept/reject panel
+                Row(
                     modifier = Modifier
-                        .size(80.dp)
-                        .background(RedError, CircleShape),
-                    contentAlignment = Alignment.Center,
+                        .fillMaxWidth()
+                        .padding(horizontal = 40.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(
-                        onClick = onEndCall,
-                        modifier = Modifier.size(80.dp),
+                    // Decline (Reject)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CallEnd,
-                            contentDescription = "End call",
-                            tint = Color.White,
-                            modifier = Modifier.size(36.dp),
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(70.dp)
+                                .background(RedError, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    callInfo?.call?.reject(false, null)
+                                },
+                                modifier = Modifier.size(70.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CallEnd,
+                                    contentDescription = "Decline Call",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(32.dp),
+                                )
+                            }
+                        }
+                        Text("Decline", fontSize = 11.sp, color = Gray600)
+                    }
+
+                    // Answer (Accept)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(70.dp)
+                                .background(GreenActive, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    @Suppress("Deprecation")
+                                    callInfo?.call?.answer(0)
+                                },
+                                modifier = Modifier.size(70.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Call,
+                                    contentDescription = "Answer Call",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(32.dp),
+                                )
+                            }
+                        }
+                        Text("Answer", fontSize = 11.sp, color = Gray600)
                     }
                 }
+            } else {
+                // Outgoing/Active standard calling controls
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 40.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Mute
+                    CallControlButton(
+                        icon = if (isMuted) Icons.Default.MicOff else Icons.Default.Mic,
+                        label = if (isMuted) "Unmute" else "Mute",
+                        isActive = isMuted,
+                        activeColor = AmberWarn,
+                        onClick = {
+                            ActiveCallHolder.setMuted(!isMuted)
+                        },
+                    )
 
-                // Speaker
-                CallControlButton(
-                    icon = Icons.AutoMirrored.Filled.VolumeUp,
-                    label = "Speaker",
-                    isActive = isSpeaker,
-                    activeColor = Indigo400,
-                    onClick = {
-                        isSpeaker = !isSpeaker
-                        audioManager.isSpeakerphoneOn = isSpeaker
-                    },
-                )
+                    // End Call — oversized red button
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .background(RedError, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        IconButton(
+                            onClick = onEndCall,
+                            modifier = Modifier.size(80.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CallEnd,
+                                contentDescription = "End call",
+                                tint = Color.White,
+                                modifier = Modifier.size(36.dp),
+                            )
+                        }
+                    }
+
+                    // Speaker
+                    CallControlButton(
+                        icon = Icons.AutoMirrored.Filled.VolumeUp,
+                        label = "Speaker",
+                        isActive = isSpeaker,
+                        activeColor = Indigo400,
+                        onClick = {
+                            ActiveCallHolder.setSpeaker(!isSpeaker)
+                        },
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))

@@ -11,6 +11,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 
+import java.io.File
+import okhttp3.MediaType
+import okhttp3.RequestBody
+import com.callops.app.data.model.RecordingPresignRequest
+
 /**
  * CallEventRepository
  *
@@ -33,11 +38,13 @@ class CallEventRepository(
     /**
      * Submits a list of call-lifecycle events (dialing, active, ended, etc.)
      * for a call that was handled in-app through the ConnectionService.
+     * Optionally uploads the provided WAV recording file to S3 first.
      */
     fun submitEvents(
         callId: String,
         contactId: String,
         events: List<CallEventPayload>,
+        audioFile: File? = null,
     ) {
         if (events.isEmpty()) {
             Log.w(TAG, "submitEvents called with empty events list — skipping")
@@ -51,17 +58,65 @@ class CallEventRepository(
                     return@launch
                 }
 
+                var finalEvents = events
+
+                // Handle call recording upload to S3 if a recording file is available
+                if (audioFile != null && audioFile.exists() && audioFile.length() > 0) {
+                    try {
+                        Log.i(TAG, "Requesting presigned upload URL for call recording $callId")
+                        val presignResponse = ApiClient.apiService.getRecordingUploadUrl(
+                            bearerToken = "Bearer ${storedUser.token}",
+                            body = RecordingPresignRequest(callId)
+                        )
+                        if (presignResponse.isSuccessful && presignResponse.body() != null) {
+                            val presignData = presignResponse.body()!!
+                            val presignedUrl = presignData.presigned_url
+                            val s3Key = presignData.s3_key
+
+                            Log.i(TAG, "Uploading WAV recording to S3: $s3Key")
+                            val mediaType = MediaType.parse("audio/wav")
+                            val requestBody = RequestBody.create(mediaType, audioFile)
+
+                            val uploadResponse = ApiClient.apiService.uploadRecording(
+                                url = presignedUrl,
+                                contentType = "audio/wav",
+                                body = requestBody
+                            )
+
+                            if (uploadResponse.isSuccessful) {
+                                Log.i(TAG, "Recording uploaded successfully to S3: $s3Key")
+                                audioFile.delete() // Clean up local file after successful upload
+                                
+                                // Map events to attach the S3 key to the 'ended' state event
+                                finalEvents = events.map { event ->
+                                    if (event.state == "ended") {
+                                        event.copy(recording_s3_key = s3Key)
+                                    } else {
+                                        event
+                                    }
+                                }
+                            } else {
+                                Log.e(TAG, "Failed to upload recording to S3: HTTP ${uploadResponse.code()}")
+                            }
+                        } else {
+                            Log.e(TAG, "Failed to get presigned upload URL: HTTP ${presignResponse.code()}")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error handling audio recording upload to S3", e)
+                    }
+                }
+
                 val response = ApiClient.apiService.submitCallEvents(
                     bearerToken = "Bearer ${storedUser.token}",
                     body = CallEventsRequest(
                         call_id = callId,
                         contact_id = contactId,
-                        events = events,
+                        events = finalEvents,
                     ),
                 )
 
                 if (response.isSuccessful) {
-                    Log.i(TAG, "Call events submitted: callId=$callId events=${events.size}")
+                    Log.i(TAG, "Call events submitted: callId=$callId events=${finalEvents.size}")
                 } else {
                     Log.e(TAG, "Failed to submit call events: HTTP ${response.code()} — callId=$callId")
                 }
