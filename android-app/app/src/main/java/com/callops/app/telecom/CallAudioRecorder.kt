@@ -21,7 +21,7 @@ class CallAudioRecorder(private val cacheDir: File) {
 
     companion object {
         private const val TAG = "CallAudioRecorder"
-        private const val SAMPLE_RATE = 8000   // 8kHz — voice quality, smaller files
+        private const val SAMPLE_RATE = 16000   // 16kHz — voice quality, highly compatible
         private const val CHANNEL = AudioFormat.CHANNEL_IN_MONO
         private const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
     }

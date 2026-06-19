@@ -18,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -38,6 +39,7 @@ import kotlinx.coroutines.delay
  */
 @Composable
 fun InCallScreen(onEndCall: () -> Unit) {
+    val context = LocalContext.current
     val callInfo by ActiveCallHolder.callInfo.collectAsState()
     val callState by ActiveCallHolder.callState.collectAsState()
     val audioState by ActiveCallHolder.audioState.collectAsState()
@@ -255,7 +257,7 @@ fun InCallScreen(onEndCall: () -> Unit) {
                         isActive = isMuted,
                         activeColor = AmberWarn,
                         onClick = {
-                            ActiveCallHolder.setMuted(!isMuted)
+                            ActiveCallHolder.setMuted(!isMuted, context)
                         },
                     )
 
@@ -286,7 +288,7 @@ fun InCallScreen(onEndCall: () -> Unit) {
                         isActive = isSpeaker,
                         activeColor = Indigo400,
                         onClick = {
-                            ActiveCallHolder.setSpeaker(!isSpeaker)
+                            ActiveCallHolder.setSpeaker(!isSpeaker, context)
                         },
                     )
                 }
