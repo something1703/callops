@@ -45,11 +45,15 @@ class CallManager(private val context: Context) {
      */
     @Suppress("MissingPermission")
     fun registerPhoneAccount() {
-        val account = PhoneAccount.builder(phoneAccountHandle, "CallOps")
-            .setCapabilities(PhoneAccount.CAPABILITY_CALL_PROVIDER)
-            .build()
-        telecomManager.registerPhoneAccount(account)
-        Log.i(TAG, "PhoneAccount registered")
+        try {
+            val account = PhoneAccount.builder(phoneAccountHandle, "CallOps")
+                .setCapabilities(PhoneAccount.CAPABILITY_CALL_PROVIDER)
+                .build()
+            telecomManager.registerPhoneAccount(account)
+            Log.i(TAG, "PhoneAccount registered successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to register PhoneAccount: ${e.message}", e)
+        }
     }
 
     /**

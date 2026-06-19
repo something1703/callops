@@ -84,9 +84,14 @@ class AuthViewModel(private val tokenStore: TokenStore) : ViewModel() {
                 _authState.value = AuthState.Error(
                     "Sign-in was cancelled or no Google account found on this device."
                 )
-            } catch (e: Exception) {
+            } catch (t: Throwable) {
+                val isNetworkError = t is java.io.IOException || t.cause is java.io.IOException
                 _authState.value = AuthState.Error(
-                    "Connection error. Make sure the app can reach the CallOps server."
+                    if (isNetworkError) {
+                        "Connection error. Make sure the app can reach the CallOps server."
+                    } else {
+                        "Sign-in error: ${t.localizedMessage ?: t.javaClass.simpleName}"
+                    }
                 )
             }
         }

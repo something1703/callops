@@ -12,6 +12,13 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Alignment
+import androidx.compose.material3.CircularProgressIndicator
+import com.callops.app.ui.theme.Gray950
+import com.callops.app.ui.theme.Indigo400
 import com.callops.app.data.CallEventRepository
 import com.callops.app.data.TokenStore
 import com.callops.app.telecom.ActiveCallHolder
@@ -24,7 +31,6 @@ import com.callops.app.ui.launchSystemDialer
 import com.callops.app.viewmodel.AuthViewModel
 import com.callops.app.viewmodel.ContactsViewModel
 import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.runBlocking
 
 object Routes {
     const val LOGIN = "login"
@@ -41,9 +47,11 @@ object Routes {
 fun CallOpsNavGraph(tokenStore: TokenStore) {
     val navController = rememberNavController()
 
-    val startDestination = remember {
-        val hasToken = runBlocking { tokenStore.userFlow().firstOrNull() != null }
-        if (hasToken) Routes.CONTACTS else Routes.LOGIN
+    var startDestination by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(tokenStore) {
+        val hasToken = tokenStore.userFlow().firstOrNull() != null
+        startDestination = if (hasToken) Routes.CONTACTS else Routes.LOGIN
     }
 
     val authViewModel = remember { AuthViewModel(tokenStore) }
@@ -55,6 +63,18 @@ fun CallOpsNavGraph(tokenStore: TokenStore) {
     remember {
         ActiveCallHolder.callEventRepository = callEventRepository
         callManager.registerPhoneAccount()
+    }
+
+    if (startDestination == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Gray950),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator(color = Indigo400)
+        }
+        return
     }
 
     // ── Manual outcome sheet state (shown after system-dialer call) ──────────
